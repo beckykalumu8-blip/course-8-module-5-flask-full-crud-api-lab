@@ -1,8 +1,10 @@
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
+app.config["PROPAGATE_EXCEPTIONS"] = True
 
-# Simulated data
+
+
 class Event:
     def __init__(self, id, title):
         self.id = id
@@ -12,80 +14,82 @@ class Event:
         return {"id": self.id, "title": self.title}
 
 
+# Initial in-memory event data
 events = [
     Event(1, "Tech Meetup"),
     Event(2, "Python Workshop")
 ]
 
 
-# POST /events - Create a new event from JSON input
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({"message": "Welcome to the Event Management API"}), 200
+
+
+@app.route("/events", methods=["GET"])
+def get_events():
+    return jsonify([event.to_dict() for event in events]), 200
+
+
 @app.route("/events", methods=["POST"])
 def create_event():
-    data = request.get_json()
+    data = request.get_json(silent=True)
 
-    # Make sure JSON data was provided
-    if not data:
-        return jsonify({"error": "Request body must contain JSON data"}), 400
+    if not isinstance(data, dict):
+        return jsonify({"error": "Valid JSON data is required"}), 400
 
-    # Make sure the title was provided
+
+
     title = data.get("title")
 
-    if not title:
-        return jsonify({"error": "Event title is required"}), 400
+    if not isinstance(title, str) or not title.strip():
+        return jsonify({"error": "Title is required"}), 400
 
-    # Generate a new ID based on the existing events
+
+
     new_id = max((event.id for event in events), default=0) + 1
-
-    # Create and store the new event
-    new_event = Event(new_id, title)
+    new_event = Event(new_id, title.strip())
     events.append(new_event)
 
     return jsonify(new_event.to_dict()), 201
 
 
-# PATCH /events/<id> - Update the title of an event
+
 @app.route("/events/<int:id>", methods=["PATCH"])
 def update_event(id):
-    data = request.get_json()
+    data = request.get_json(silent=True)
 
-    if not data:
-        return jsonify({"error": "Request body must contain JSON data"}), 400
+    if not isinstance(data, dict):
+        return jsonify({"error": "Valid JSON data is required"}), 400
 
-    # Find the event with the requested ID
-    event = next((event for event in events if event.id == id), None)
-
-    if event is None:
-        return jsonify({"error": "Event not found"}), 404
-
-    # Update only the title
     title = data.get("title")
 
-    if not title:
-        return jsonify({"error": "Event title is required"}), 400
+    if not isinstance(title, str) or not title.strip():
+        return jsonify({"error": "Title is required"}), 400
 
-    event.title = title
+    for event in events:
+        if event.id == id:
+            event.title = title.strip()
+            return jsonify(event.to_dict()), 200
 
-    return jsonify(event.to_dict()), 200
+    return jsonify({"error": f"Event with ID {id} not found"}), 404
 
 
-# DELETE /events/<id> - Remove an event from the list
+
+
+
+
 @app.route("/events/<int:id>", methods=["DELETE"])
 def delete_event(id):
-    # Find the event with the requested ID
-    event = next((event for event in events if event.id == id), None)
+    for event in events:
+        if event.id == id:
+            events.remove(event)
+            return "", 204
 
-    if event is None:
-        return jsonify({"error": "Event not found"}), 404
-
-    # Remove the event from the in-memory list
-    events.remove(event)
-
-    return jsonify({
-        "message": "Event deleted successfully",
-        "event": event.to_dict()
-    }), 200
+    return jsonify({"error": f"Event with ID {id} not found"}), 404
 
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
